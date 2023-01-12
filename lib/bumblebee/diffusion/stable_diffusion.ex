@@ -336,7 +336,9 @@ defmodule Bumblebee.Diffusion.StableDiffusion do
     inputs =
       Bumblebee.Utils.Nx.composite_concatenate(inputs["unconditional"], inputs["conditional"])
 
-    %{hidden_state: text_embeddings} = encoder_predict.(encoder_params, inputs)
+    %{hidden_state: text_embeddings} = encoder_predict.(encoder_params, inputs |> transform(fn x ->
+      Map.new(x, fn {a,b} -> {a, Nx.as_type(b, :f16)} end)
+    end))
 
     {twice_batch_size, sequence_length, hidden_size} = Nx.shape(text_embeddings)
     batch_size = div(twice_batch_size, 2)
@@ -354,7 +356,7 @@ defmodule Bumblebee.Diffusion.StableDiffusion do
     {scheduler_state, timesteps} = scheduler_init.(latents_shape)
 
     key = Nx.Random.key(seed)
-    {latents, _key} = Nx.Random.normal(key, shape: latents_shape)
+    {latents, _key} = Nx.Random.normal(key, shape: latents_shape, type: Nx.type(text_embeddings))
 
     {_, latents, _, _} =
       while {scheduler_state, latents, text_embeddings, unet_params}, timestep <- timesteps do
@@ -363,8 +365,13 @@ defmodule Bumblebee.Diffusion.StableDiffusion do
           "timestep" => timestep,
           "encoder_hidden_state" => text_embeddings
         }
+        |> transform(fn x ->
+          Map.new(x, fn {a,b} -> {a, Nx.as_type(b, :f16)} end)
+        end)
 
         %{sample: noise_pred} = unet_predict.(unet_params, unet_inputs)
+
+        print_expr(Nx.type(noise_pred))
 
         {noise_pred_unconditional, noise_pred_text} = split_in_half(noise_pred)
 
@@ -373,7 +380,7 @@ defmodule Bumblebee.Diffusion.StableDiffusion do
 
         {scheduler_state, latents} = scheduler_step.(scheduler_state, latents, noise_pred)
 
-        {scheduler_state, latents, text_embeddings, unet_params}
+        {scheduler_state, latents |> Nx.as_type(:f16), text_embeddings, unet_params}
       end
 
     latents = latents * (1 / 0.18215)
