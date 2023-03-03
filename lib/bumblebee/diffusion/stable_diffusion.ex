@@ -226,38 +226,46 @@ defmodule Bumblebee.Diffusion.StableDiffusion do
          defn_options
        ) do
     image_fun =
-      Shared.compile_or_jit(image_fun, defn_options, compile?, fn ->
-        text_inputs = %{
-          "input_ids" => Nx.template({batch_size, sequence_length}, :s64)
-        }
+      Shared.compile_or_jit(
+        image_fun,
+        defn_options,
+        compile?,
+        [encoder_params, unet_params, vae_params],
+        fn ->
+          text_inputs = %{
+            "input_ids" => Nx.template({batch_size, sequence_length}, :s64)
+          }
 
-        inputs = %{"unconditional" => text_inputs, "conditional" => text_inputs}
-
-        [encoder_params, unet_params, vae_params, inputs]
-      end)
+          %{"unconditional" => text_inputs, "conditional" => text_inputs}
+        end
+      )
 
     safety_checker_fun =
       safety_checker_fun &&
-        Shared.compile_or_jit(safety_checker_fun, defn_options, compile?, fn ->
-          inputs = %{
-            "pixel_values" =>
-              Shared.input_template(safety_checker_spec, "pixel_values", [
-                batch_size * num_images_per_prompt
-              ])
-          }
-
-          [safety_checker_params, inputs]
-        end)
+        Shared.compile_or_jit(
+          safety_checker_fun,
+          defn_options,
+          compile?,
+          [safety_checker_params],
+          fn ->
+            %{
+              "pixel_values" =>
+                Shared.input_template(safety_checker_spec, "pixel_values", [
+                  batch_size * num_images_per_prompt
+                ])
+            }
+          end
+        )
 
     fn inputs ->
       inputs = Shared.maybe_pad(inputs, batch_size)
 
-      image = image_fun.(encoder_params, unet_params, vae_params, inputs)
+      image = image_fun.(inputs)
 
       output =
         if safety_checker? do
           inputs = Bumblebee.apply_featurizer(safety_checker_featurizer, image)
-          outputs = safety_checker_fun.(safety_checker_params, inputs)
+          outputs = safety_checker_fun.(inputs)
           %{image: image, is_unsafe: outputs.is_unsafe}
         else
           %{image: image}

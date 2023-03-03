@@ -35,17 +35,15 @@ defmodule Bumblebee.Vision.ImageClassification do
     Nx.Serving.new(
       fn defn_options ->
         scores_fun =
-          Shared.compile_or_jit(scores_fun, defn_options, compile != nil, fn ->
-            inputs = %{
+          Shared.compile_or_jit(scores_fun, defn_options, compile != nil, [params], fn ->
+            %{
               "pixel_values" => Shared.input_template(spec, "pixel_values", [batch_size])
             }
-
-            [params, inputs]
           end)
 
         fn inputs ->
           inputs = Shared.maybe_pad(inputs, batch_size)
-          scores_fun.(params, inputs)
+          scores_fun.(inputs)
         end
       end,
       defn_options

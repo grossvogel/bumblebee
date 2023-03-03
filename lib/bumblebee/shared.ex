@@ -273,23 +273,62 @@ defmodule Bumblebee.Shared do
   @doc """
   Compiles or wraps the function with just-in-time compilation.
 
-  When `compile?` is `true`, runs `template_fun` to get template args
+  When `compile?` is `true`, runs `template_fun` to get inputs template
   and calls compiles the function upfront. The template function may
   return a mix of tensors and templates, all arguments are automatically
   converter to templates.
+
+  Parameters in `params_list` are always passed as leading arguments to
+  `fun`. The returned function expects only inputs, the parameters are
+  passed automatically. By default the parameters are passed as argument
+  to the defn computation, however you can embed them directly into the
+  computation using the `:embed_params` option.
+
+  ## Options
+
+    * `:embed_params` - whether params should be embedded in the compiled
+      computation. Defaults to `false`
+
   """
   @spec compile_or_jit(
           function(),
           keyword(),
           boolean(),
-          (() -> list(Nx.Tensor.t()))
+          list(Nx.Tensor.t()),
+          (() -> Nx.Tensor.t() | Nx.Container.t()),
+          keyword()
         ) :: function()
-  def compile_or_jit(fun, defn_options, compile?, template_fun) do
-    if compile? do
-      template_args = template_fun.() |> templates()
-      Nx.Defn.compile(fun, template_args, defn_options)
+  def compile_or_jit(fun, defn_options, compile?, params_list, template_fun, opts \\ []) do
+    opts = Keyword.validate!(opts, embed_params: false)
+
+    embed_params? = opts[:embed_params]
+
+    fun_to_compile =
+      if embed_params? do
+        params_list = Enum.map(params_list, &Nx.backend_copy(&1, Nx.Defn.Expr))
+
+        fn inputs ->
+          apply(fun, params_list ++ [inputs])
+        end
+      else
+        fun
+      end
+
+    compiled_fun =
+      if compile? do
+        inputs = template_fun.()
+        template_args = templates(if(embed_params?, do: [], else: params_list) ++ [inputs])
+        Nx.Defn.compile(fun_to_compile, template_args, defn_options)
+      else
+        Nx.Defn.jit(fun_to_compile, defn_options)
+      end
+
+    if embed_params? do
+      compiled_fun
     else
-      Nx.Defn.jit(fun, defn_options)
+      fn inputs ->
+        apply(compiled_fun, params_list ++ [inputs])
+      end
     end
   end
 

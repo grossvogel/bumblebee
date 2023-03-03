@@ -54,20 +54,18 @@ defmodule Bumblebee.Text.ZeroShotClassification do
     Nx.Serving.new(
       fn defn_options ->
         scores_fun =
-          Shared.compile_or_jit(scores_fun, defn_options, compile != nil, fn ->
-            inputs = %{
+          Shared.compile_or_jit(scores_fun, defn_options, compile != nil, [params], fn ->
+            %{
               "input_ids" =>
                 Nx.template({batch_size, sequences_per_batch, sequence_length}, :s64),
               "attention_mask" =>
                 Nx.template({batch_size, sequences_per_batch, sequence_length}, :s64)
             }
-
-            [params, inputs]
           end)
 
         fn inputs ->
           inputs = Shared.maybe_pad(inputs, batch_size)
-          scores = scores_fun.(params, inputs)
+          scores = scores_fun.(inputs)
           Utils.Nx.composite_unflatten_batch(scores, inputs.size)
         end
       end,

@@ -23,17 +23,15 @@ defmodule Bumblebee.Audio.SpeechToText do
     Nx.Serving.new(
       fn defn_options ->
         generate_fun =
-          Shared.compile_or_jit(generate_fun, defn_options, compile != nil, fn ->
-            inputs = %{
+          Shared.compile_or_jit(generate_fun, defn_options, compile != nil, [params], fn ->
+            %{
               "input_features" => Shared.input_template(spec, "input_features", [batch_size])
             }
-
-            [params, inputs]
           end)
 
         fn inputs ->
           inputs = Shared.maybe_pad(inputs, batch_size)
-          generate_fun.(params, inputs)
+          generate_fun.(inputs)
         end
       end,
       defn_options
