@@ -135,7 +135,8 @@ defmodule Bumblebee.Diffusion.StableDiffusion do
         num_images_per_prompt: 1,
         guidance_scale: 7.5,
         seed: 0,
-        defn_options: []
+        defn_options: [],
+        embed_params: false
       ])
 
     safety_checker = opts[:safety_checker]
@@ -144,6 +145,7 @@ defmodule Bumblebee.Diffusion.StableDiffusion do
     num_images_per_prompt = opts[:num_images_per_prompt]
     compile = opts[:compile]
     defn_options = opts[:defn_options]
+    embed_params = opts[:embed_params]
 
     if safety_checker != nil and safety_checker_featurizer == nil do
       raise ArgumentError, "got :safety_checker but no :safety_checker_featurizer was specified"
@@ -206,7 +208,7 @@ defmodule Bumblebee.Diffusion.StableDiffusion do
     ]
 
     Nx.Serving.new(
-      fn defn_options -> apply(&init/9, init_args ++ [defn_options]) end,
+      fn defn_options -> apply(&init/10, init_args ++ [defn_options, embed_params]) end,
       defn_options
     )
     |> Nx.Serving.process_options(batch_size: batch_size)
@@ -223,7 +225,8 @@ defmodule Bumblebee.Diffusion.StableDiffusion do
          safety_checker_featurizer,
          {compile?, batch_size, sequence_length},
          num_images_per_prompt,
-         defn_options
+         defn_options,
+         embed_params
        ) do
     image_fun =
       Shared.compile_or_jit(
@@ -237,7 +240,8 @@ defmodule Bumblebee.Diffusion.StableDiffusion do
           }
 
           %{"unconditional" => text_inputs, "conditional" => text_inputs}
-        end
+        end,
+        embed_params: embed_params
       )
 
     safety_checker_fun =
@@ -254,7 +258,8 @@ defmodule Bumblebee.Diffusion.StableDiffusion do
                   batch_size * num_images_per_prompt
                 ])
             }
-          end
+          end,
+          embed_params: embed_params
         )
 
     fn inputs ->
