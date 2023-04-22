@@ -161,7 +161,8 @@ defmodule Bumblebee.Text.GptNeoX do
     Layers.Decoder.init_cache(batch_size, max_length,
       hidden_size: spec.hidden_size,
       decoder_num_attention_heads: spec.num_attention_heads,
-      decoder_num_blocks: spec.num_blocks
+      decoder_num_blocks: spec.num_blocks,
+      attention_head_size: 80
     )
   end
 
